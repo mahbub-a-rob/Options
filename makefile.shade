@@ -3,5 +3,9 @@ var VERSION='0.1'
 var FULL_VERSION='0.1'
 var AUTHORS='Microsoft Open Technologies, Inc.'
 
+@{
+System.Console.WriteLine(">>>>>>>>> Testing private build <<<<<<<<<<");
+}
+
 use-standard-lifecycle
 k-standard-goals

@@ -28,3 +28,7 @@ project.lock.json
 .vs
 .build/
 .testPublish/
+
+# Korebuild logs
+korebuild.msbuild.log
+korebuild.log

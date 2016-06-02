@@ -1,67 +1,54 @@
-$ErrorActionPreference = "Stop"
+[CmdletBinding(PositionalBinding=$false)]
+param(
+    [switch]$SkipKoreBuildUpdate,
+    [switch]$RecloneKoreBuild,
+    [string]$KoreBuildRepo,
+    [string]$KoreBuildBranch = "anurse/msbuild", # TEMPORARY until this is merged to dev
+    [string]$KoreBuildDestination = "$PSScriptRoot\.build",
+    [Parameter(ValueFromRemainingArguments=$true)][string[]]$KoreBuildArgs)
 
-function DownloadWithRetry([string] $url, [string] $downloadLocation, [int] $retries) 
-{
-    while($true)
-    {
-        try
-        {
-            Invoke-WebRequest $url -OutFile $downloadLocation
-            break
-        }
-        catch
-        {
-            $exceptionMessage = $_.Exception.Message
-            Write-Host "Failed to download '$url': $exceptionMessage"
-            if ($retries -gt 0) {
-                $retries--
-                Write-Host "Waiting 10 seconds before retrying. Retries left: $retries"
-                Start-Sleep -Seconds 10
+if($RecloneKoreBuild -or !$SkipKoreBuildUpdate) {
+    if($RecloneKoreBuild) {
+        del -rec -for $KoreBuildDestination
+    }
 
-            }
-            else 
-            {
-                $exception = $_.Exception
-                throw $exception
+    if(Test-Path "$KoreBuildDestination\.git") {
+        Write-Host -ForegroundColor Green "Updating KoreBuild..."
+        pushd $KoreBuildDestination
+        git checkout $KoreBuildBranch 2>&1 | ForEach-Object { Write-Host -ForegroundColor DarkGray $_ }
+        git pull origin $KoreBuildBranch 2>&1 | ForEach-Object { Write-Host -ForegroundColor DarkGray $_ }
+        popd
+    } else {
+        if(Test-Path $KoreBuildDestination) {
+            del -rec -for $KoreBuildDestination
+        }
+        Write-Host -ForegroundColor Green "Fetching KoreBuild..."
+
+        if(!$KoreBuildRepo) {
+            # Check what the origin is for this repo so we can match the type (SSL/HTTPS)
+            pushd $PSScriptRoot
+            $ThisRepo = git remote get-url origin
+            popd
+
+            if($ThisRepo.StartsWith("http")) {
+                $KoreBuildRepo = "https://github.com/aspnet/KoreBuild"
+            } else {
+                $KoreBuildRepo = "git@github.com:aspnet/KoreBuild"
             }
         }
+
+        git clone $KoreBuildRepo -b $KoreBuildBranch $KoreBuildDestination 2>&1 | ForEach-Object { Write-Host -ForegroundColor DarkGray $_ }
     }
 }
 
-cd $PSScriptRoot
-
-$repoFolder = $PSScriptRoot
-$env:REPO_FOLDER = $repoFolder
-
-$koreBuildZip="https://github.com/aspnet/KoreBuild/archive/dev.zip"
-if ($env:KOREBUILD_ZIP)
-{
-    $koreBuildZip=$env:KOREBUILD_ZIP
+if(($KoreBuildArgs -contains "-t:") -or ($KoreBuildArgs -contains "-p:")) {
+    throw "Due to PowerShell weirdness, you need to use '/t:' and '/p:' to pass targets and properties to MSBuild"
 }
 
-$buildFolder = ".build"
-$buildFile="$buildFolder\KoreBuild.ps1"
-
-if (!(Test-Path $buildFolder)) {
-    Write-Host "Downloading KoreBuild from $koreBuildZip"    
-    
-    $tempFolder=$env:TEMP + "\KoreBuild-" + [guid]::NewGuid()
-    New-Item -Path "$tempFolder" -Type directory | Out-Null
-
-    $localZipFile="$tempFolder\korebuild.zip"
-    
-    DownloadWithRetry -url $koreBuildZip -downloadLocation $localZipFile -retries 6
-
-    Add-Type -AssemblyName System.IO.Compression.FileSystem
-    [System.IO.Compression.ZipFile]::ExtractToDirectory($localZipFile, $tempFolder)
-    
-    New-Item -Path "$buildFolder" -Type directory | Out-Null
-    copy-item "$tempFolder\**\build\*" $buildFolder -Recurse
-
-    # Cleanup
-    if (Test-Path $tempFolder) {
-        Remove-Item -Recurse -Force $tempFolder
-    }
+# Launch KoreBuild
+try {
+    pushd $PSScriptRoot
+    & "$KoreBuildDestination\build\KoreBuild.ps1" @KoreBuildArgs
+} finally {
+    popd
 }
-
-&"$buildFile" $args

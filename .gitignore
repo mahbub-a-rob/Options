@@ -29,6 +29,8 @@ project.lock.json
 .build/
 .testPublish/
 
+*.generated.cs
+
 # Korebuild logs
 korebuild.msbuild.log
 korebuild.log

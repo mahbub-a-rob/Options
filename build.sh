@@ -1,46 +1,45 @@
 #!/usr/bin/env bash
-repoFolder="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-cd $repoFolder
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symlink
+  DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE" # if $SOURCE was a relative symlink, we need to resolve it relative to the path where the symlink file was located
+done
+DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
 
-koreBuildZip="https://github.com/aspnet/KoreBuild/archive/dev.zip"
-if [ ! -z $KOREBUILD_ZIP ]; then
-    koreBuildZip=$KOREBUILD_ZIP
-fi
+DEFAULT_BUILD_TOOLS_REPO="aspnet/DnxTools"
+DEFAULT_BUILD_TOOLS_BRANCH="anurse/aspnet-build"
 
-buildFolder=".build"
-buildFile="$buildFolder/KoreBuild.sh"
+BUILD_TOOLS_ROOT="$DIR/.build"
+INSTALL_SCRIPT="$BUILD_TOOLS_ROOT/install-aspnet-build.sh"
+BUILD_TOOLS_PATH="$DIR/.build/aspnet-build"
 
-if test ! -d $buildFolder; then
-    echo "Downloading KoreBuild from $koreBuildZip"
-    
-    tempFolder="/tmp/KoreBuild-$(uuidgen)"    
-    mkdir $tempFolder
-    
-    localZipFile="$tempFolder/korebuild.zip"
-    
-    retries=6
-    until (wget -O $localZipFile $koreBuildZip 2>/dev/null || curl -o $localZipFile --location $koreBuildZip 2>/dev/null)
-    do
-        echo "Failed to download '$koreBuildZip'"
-        if [ "$retries" -le 0 ]; then
-            exit 1
-        fi
-        retries=$((retries - 1))
-        echo "Waiting 10 seconds before retrying. Retries left: $retries"
-        sleep 10s
-    done
-    
-    unzip -q -d $tempFolder $localZipFile
-  
-    mkdir $buildFolder
-    cp -r $tempFolder/**/build/** $buildFolder
-    
-    chmod +x $buildFile
-    
-    # Cleanup
-    if test ! -d $tempFolder; then
-        rm -rf $tempFolder  
+[ -z "$ASPNETBUILD_TOOLS_REPO" ] && ASPNETBUILD_TOOLS_REPO="$DEFAULT_BUILD_TOOLS_REPO"
+[ -z "$ASPNETBUILD_TOOLS_BRANCH" ] && ASPNETBUILD_TOOLS_BRANCH="$DEFAULT_BUILD_TOOLS_BRANCH"
+[ -z "$ASPNETBUILD_TOOLS_INSTALL_SCRIPT_URL" ] && ASPNETBUILD_TOOLS_INSTALL_SCRIPT_URL="https://raw.githubusercontent.com/$ASPNETBUILD_TOOLS_REPO/$ASPNETBUILD_TOOLS_BRANCH/scripts/install/install-aspnet-build.sh"
+
+INSTALL_SCRIPT="$DIR/.build/install-aspnet-build.sh"
+
+if [ ! -e "$INSTALL_SCRIPT" ]; then
+    INSTALL_DIR=$(dirname "$INSTALL_SCRIPT")
+    if [ ! -e "$INSTALL_DIR" ]; then
+        mkdir -p "$INSTALL_DIR"
     fi
+
+    echo "$(tput setaf 2)Fetching install script from $ASPNETBUILD_TOOLS_INSTALL_SCRIPT_URL ...$(tput setaf 7)"
+    curl -sSL -o "$INSTALL_SCRIPT" "$ASPNETBUILD_TOOLS_INSTALL_SCRIPT_URL"
 fi
 
-$buildFile -r $repoFolder "$@"
+TRAINFILE="$DIR/Trainfile"
+REPOFILE="$DIR/Repofile"
+if [ -e "$TRAINFILE" ]; then
+    "$INSTALL_SCRIPT" --trainfile "$TRAINFILE"
+elif [ -e "$REPOFILE" ]; then
+    "$INSTALL_SCRIPT" --trainfile "$REPOFILE"
+else
+    "$INSTALL_SCRIPT" --branch "$ASPNETBUILD_TOOLS_BRANCH"
+fi
+
+BUILD_TOOLS_PATH=$("$INSTALL_SCRIPT" --get-path --branch "$ASPNETBUILD_TOOLS_BRANCH")
+
+"$BUILD_TOOLS_PATH/bin/aspnet-build" "$@"

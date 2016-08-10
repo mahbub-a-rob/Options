@@ -28,18 +28,20 @@ if [ ! -e "$INSTALL_SCRIPT" ]; then
 
     echo "$(tput setaf 2)Fetching install script from $ASPNETBUILD_TOOLS_INSTALL_SCRIPT_URL ...$(tput setaf 7)"
     curl -sSL -o "$INSTALL_SCRIPT" "$ASPNETBUILD_TOOLS_INSTALL_SCRIPT_URL"
+    chmod a+x "$INSTALL_SCRIPT"
 fi
 
 TRAINFILE="$DIR/Trainfile"
 REPOFILE="$DIR/Repofile"
 if [ -e "$TRAINFILE" ]; then
     "$INSTALL_SCRIPT" --trainfile "$TRAINFILE"
+    BUILD_TOOLS_PATH=$("$INSTALL_SCRIPT" --get-path --trainfile "$TRAINFILE")
 elif [ -e "$REPOFILE" ]; then
     "$INSTALL_SCRIPT" --trainfile "$REPOFILE"
+    BUILD_TOOLS_PATH=$("$INSTALL_SCRIPT" --get-path --trainfile "$REPOFILE")
 else
     "$INSTALL_SCRIPT" --branch "$ASPNETBUILD_TOOLS_BRANCH"
+    BUILD_TOOLS_PATH=$("$INSTALL_SCRIPT" --get-path --branch "$ASPNETBUILD_TOOLS_BRANCH")
 fi
-
-BUILD_TOOLS_PATH=$("$INSTALL_SCRIPT" --get-path --branch "$ASPNETBUILD_TOOLS_BRANCH")
 
 "$BUILD_TOOLS_PATH/bin/aspnet-build" "$@"
